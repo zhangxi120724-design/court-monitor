@@ -3,3 +3,6 @@ node_modules/
 .auth/
 playwright-report/
 test-results/
+perfectgym-booking-bot
+perfectgym-booking-bot.bin
+.cache/
