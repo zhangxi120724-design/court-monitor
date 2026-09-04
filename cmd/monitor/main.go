@@ -27,10 +27,16 @@ type directZone struct {
 
 type directSchedule struct {
 	CalendarData []directScheduleHour `json:"CalendarData"`
+	PagerData    directPagerData      `json:"PagerData"`
 }
 
 type directScheduleHour struct {
+	Hour          string                 `json:"Hour"`
 	ClassesPerDay [][]directScheduleSlot `json:"ClassesPerDay"`
+}
+
+type directPagerData struct {
+	Days []string `json:"Days"`
 }
 
 type directScheduleSlot struct {
@@ -80,35 +86,23 @@ func main() {
 		return
 	}
 
-	// 获取场地类型
-	zoneTypes, err := api.getClubZoneTypes()
-	if err != nil {
-		log.Printf("Failed to get zone types: %v", err)
-		sendTelegramNotification(telegramToken, telegramChatID, fmt.Sprintf("❌ 获取场地类型失败: %v", err))
-		return
-	}
-
 	// 检查 Indoor (85) 和 Outdoor (83)
 	var availableSlots []string
 
 	// 检查 Indoor
-	if zoneType, ok := zoneTypes["85"]; ok {
-		slots, err := checkZoneAvailability(api, 85, zoneType, "Indoor", now)
-		if err != nil {
-			log.Printf("Check indoor failed: %v", err)
-		} else {
-			availableSlots = append(availableSlots, slots...)
-		}
+	slots, err := checkZoneAvailability(api, 85, "Indoor", now)
+	if err != nil {
+		log.Printf("Check indoor failed: %v", err)
+	} else {
+		availableSlots = append(availableSlots, slots...)
 	}
 
 	// 检查 Outdoor
-	if zoneType, ok := zoneTypes["83"]; ok {
-		slots, err := checkZoneAvailability(api, 83, zoneType, "Outdoor", now)
-		if err != nil {
-			log.Printf("Check outdoor failed: %v", err)
-		} else {
-			availableSlots = append(availableSlots, slots...)
-		}
+	slots, err = checkZoneAvailability(api, 83, "Outdoor", now)
+	if err != nil {
+		log.Printf("Check outdoor failed: %v", err)
+	} else {
+		availableSlots = append(availableSlots, slots...)
 	}
 
 	// 发送消息
@@ -127,44 +121,58 @@ func main() {
 	sendTelegramNotification(telegramToken, telegramChatID, msg)
 }
 
-func checkZoneAvailability(api *directAPIClient, zoneTypeID int, zoneType directZoneType, zoneTypeName string, now time.Time) ([]string, error) {
+func checkZoneAvailability(api *directAPIClient, zoneTypeID int, zoneTypeName string, now time.Time) ([]string, error) {
 	var slots []string
 
-	// 一次请求获取整周数据
 	scheduleDate := now.Format("2006-01-02")
-	log.Printf("DEBUG: Checking %s zones starting from %s", zoneTypeName, scheduleDate)
+	log.Printf("DEBUG: Checking %s (zoneTypeId=%d) starting from %s", zoneTypeName, zoneTypeID, scheduleDate)
 
-	for _, zone := range zoneType.Zones {
-		schedule, err := api.getWeeklySchedule(zoneTypeID, zone.ID, scheduleDate)
-		if err != nil {
-			log.Printf("Get schedule for %s %s: %v", zoneTypeName, zone.Name, err)
-			continue
-		}
+	schedule, err := api.getWeeklySchedule(zoneTypeID, scheduleDate)
+	if err != nil {
+		return nil, fmt.Errorf("get schedule for %s: %w", zoneTypeName, err)
+	}
 
-		log.Printf("DEBUG: %s %s returned %d days of data", zoneTypeName, zone.Name, len(schedule.CalendarData))
+	log.Printf("DEBUG: %s returned %d hours of data, days: %v", zoneTypeName, len(schedule.CalendarData), schedule.PagerData.Days)
 
-		// 遍历 7 天的数据
-		for dayIdx, hour := range schedule.CalendarData {
-			if dayIdx >= 7 {
-				break  // 只取前 7 天
+	// 遍历所有小时
+	for hourIdx, hourData := range schedule.CalendarData {
+		// 遍历 7 天（每个小时有 7 天的数据）
+		for dayIdx, daySlots := range hourData.ClassesPerDay {
+			if dayIdx >= len(schedule.PagerData.Days) {
+				break
 			}
 
-			currentDate := now.AddDate(0, 0, dayIdx).Format("2006-01-02")
-			log.Printf("DEBUG: Day %d (%s) has %d time slots", dayIdx, currentDate, len(hour.ClassesPerDay))
+			currentDate := schedule.PagerData.Days[dayIdx]
 
-			for _, daySlots := range hour.ClassesPerDay {
-				for _, slot := range daySlots {
-					if strings.EqualFold(slot.Status, "Bookable") {
-						// 获取时间戳
-						slotHour, slotMin := parseTimeString(slot.StartTime)
+			// 遍历这个时间段的所有 slot
+			for _, slot := range daySlots {
+				if strings.EqualFold(slot.Status, "Bookable") {
+					// 从 slot.StartTime 直接提取时间 (格式: 2026-09-09T15:00:00)
+					slotTime, err := time.Parse("2006-01-02T15:04:05", slot.StartTime)
+					if err != nil {
+						log.Printf("Failed to parse slot time %s: %v", slot.StartTime, err)
+						continue
+					}
 
-						// 判断 slot 是否在目标时间窗口
-						// TODO: 改回生产配置 (工作日 8-10pm, 周末 5-10pm)
-						inTargetWindow := slotHour >= 15 && slotHour < 23  // 测试: 3pm-11pm 任意场地
+					slotHour := slotTime.Hour()
+					slotMin := slotTime.Minute()
 
-						if inTargetWindow {
-							duration := slot.BookingDuration
-							slots = append(slots, fmt.Sprintf("%s %s %s - %02d:%02d (%s)", currentDate, zoneTypeName, zone.Name, slotHour, slotMin, duration))
+					// 判断是否在目标时间窗口
+					// TODO: 改回生产配置 (工作日 8-10pm, 周末 5-10pm)
+					inTargetWindow := slotHour >= 15 && slotHour < 23  // 测试: 3pm-11pm
+
+					if inTargetWindow {
+						// 调用 Start API 获取具体的 Court 信息
+						courts, errStart := api.getStartFacilityInfo(zoneTypeID, slot.StartTime)
+						if errStart != nil {
+							log.Printf("Failed to get facility info for %s at %s: %v", zoneTypeName, slot.StartTime, errStart)
+							continue
+						}
+
+						// 对每个 court 添加通知
+						for _, courtName := range courts {
+							slots = append(slots, fmt.Sprintf("%s %s %s - %02d:%02d (%s)",
+								currentDate, zoneTypeName, courtName, slotHour, slotMin, slot.BookingDuration))
 						}
 					}
 				}
@@ -173,21 +181,6 @@ func checkZoneAvailability(api *directAPIClient, zoneTypeID int, zoneType direct
 	}
 
 	return slots, nil
-}
-
-func parseTimeString(timeStr string) (int, int) {
-	parts := strings.Split(timeStr, ":")
-	hour := 0
-	minute := 0
-	if len(parts) > 0 {
-		h, _ := strconv.Atoi(parts[0])
-		hour = h
-	}
-	if len(parts) > 1 {
-		m, _ := strconv.Atoi(parts[1])
-		minute = m
-	}
-	return hour, minute
 }
 
 func newDirectAPIClient(baseURL, storagePath string) (*directAPIClient, error) {
@@ -229,12 +222,11 @@ func (api *directAPIClient) getClubZoneTypes() (map[string]directZoneType, error
 	return zoneTypes, nil
 }
 
-func (api *directAPIClient) getWeeklySchedule(zoneTypeID, zoneID int, scheduleDate string) (*directSchedule, error) {
+func (api *directAPIClient) getWeeklySchedule(zoneTypeID int, scheduleDate string) (*directSchedule, error) {
 	payload := map[string]interface{}{
 		"clubId":     1,
 		"date":       scheduleDate,
 		"zoneTypeId": strconv.Itoa(zoneTypeID),
-		"zoneId":     zoneID,
 		"daysInWeek": 7,
 	}
 
@@ -243,6 +235,63 @@ func (api *directAPIClient) getWeeklySchedule(zoneTypeID, zoneID int, scheduleDa
 		return nil, err
 	}
 	return &schedule, nil
+}
+
+func (api *directAPIClient) getStartFacilityInfo(zoneTypeID int, startDateTime string) ([]string, error) {
+	// GET /FacilityBookings/BuyProductBeforeBookingFacility/Start
+	url := fmt.Sprintf("%s/FacilityBookings/BuyProductBeforeBookingFacility/Start?clubId=1&zoneTypeId=%d&startDate=%s",
+		api.baseURL, zoneTypeID, startDateTime)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("authorization", "Bearer "+api.token)
+	req.Header.Set("accept", "application/json, text/plain, */*")
+	req.Header.Set("cp-lang", "en")
+	req.Header.Set("cp-mode", "desktop")
+	req.Header.Set("x-requested-with", "XMLHttpRequest")
+
+	resp, err := api.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("api returned %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	// 解析响应获取 Court 名称
+	var startResp map[string]interface{}
+	if err := json.Unmarshal(respBody, &startResp); err != nil {
+		return nil, fmt.Errorf("decode start response: %w", err)
+	}
+
+	var courtNames []string
+	if data, ok := startResp["Data"].(map[string]interface{}); ok {
+		if zones, ok := data["Zones"].([]interface{}); ok {
+			for _, zone := range zones {
+				if zoneMap, ok := zone.(map[string]interface{}); ok {
+					if name, ok := zoneMap["Name"].(string); ok {
+						courtNames = append(courtNames, name)
+					}
+				}
+			}
+		}
+	}
+
+	if len(courtNames) == 0 {
+		return nil, fmt.Errorf("no courts found in start response")
+	}
+
+	return courtNames, nil
 }
 
 func (api *directAPIClient) postJSON(path string, payload interface{}, out interface{}) error {
