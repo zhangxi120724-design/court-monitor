@@ -157,14 +157,24 @@ func checkZoneAvailability(api *directAPIClient, zoneTypeID int, zoneTypeName st
 					slotHour := slotTime.Hour()
 					slotMin := slotTime.Minute()
 
-					// 判断是否在目标时间窗口（工作日 20-22, 周末 17-22）
+					// 判断是否是周末或公共假日
 					dayOfWeek := slotTime.Weekday()
-					isWeekend := dayOfWeek == time.Saturday || dayOfWeek == time.Sunday
+					isWeekend := dayOfWeek == time.Saturday || dayOfWeek == time.Sunday || isSGPublicHoliday(slotTime)
+
+					// 根据场地类型判断时间窗口
 					var inTargetWindow bool
-					if isWeekend {
-						inTargetWindow = slotHour >= 17 && slotHour < 22 // 周末 5pm-10pm
-					} else {
-						inTargetWindow = slotHour >= 20 && slotHour < 22 // 工作日 8pm-10pm
+					if zoneTypeID == 85 { // Indoor
+						if isWeekend {
+							inTargetWindow = true // 周末全天开放
+						} else {
+							inTargetWindow = slotHour >= 19 && slotHour < 22 // 工作日 7pm-10pm
+						}
+					} else if zoneTypeID == 83 { // Outdoor
+						if isWeekend {
+							inTargetWindow = slotHour >= 17 && slotHour < 22 // 周末 5pm-10pm
+						} else {
+							inTargetWindow = slotHour >= 20 && slotHour < 22 // 工作日 8pm-10pm
+						}
 					}
 
 					if inTargetWindow {
@@ -187,6 +197,30 @@ func checkZoneAvailability(api *directAPIClient, zoneTypeID int, zoneTypeName st
 	}
 
 	return slots, nil
+}
+
+func isSGPublicHoliday(t time.Time) bool {
+	// 新加坡公共假日（2026年）
+	holidays := []string{
+		"2026-01-01", // New Year's Day
+		"2026-02-10", // Chinese New Year
+		"2026-02-11", // Chinese New Year (in lieu)
+		"2026-03-27", // Good Friday
+		"2026-04-10", // Hari Raya Puasa
+		"2026-05-24", // Vesak Day
+		"2026-06-22", // Hari Raya Haji
+		"2026-08-09", // National Day
+		"2026-10-23", // Deepavali
+		"2026-12-25", // Christmas Day
+	}
+
+	dateStr := t.Format("2006-01-02")
+	for _, holiday := range holidays {
+		if dateStr == holiday {
+			return true
+		}
+	}
+	return false
 }
 
 func newDirectAPIClient(baseURL, storagePath string) (*directAPIClient, error) {
