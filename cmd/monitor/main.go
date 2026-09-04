@@ -173,7 +173,7 @@ func checkZoneAvailability(api *directAPIClient, zoneTypeID int, zoneTypeName st
 						if isWeekend {
 							inTargetWindow = slotHour >= 17 && slotHour < 22 // 周末 5pm-10pm
 						} else {
-							inTargetWindow = slotHour >= 20 && slotHour < 22 // 工作日 8pm-10pm
+							inTargetWindow = slotHour >= 19 && slotHour < 22 // 工作日 7pm-10pm
 						}
 					}
 
