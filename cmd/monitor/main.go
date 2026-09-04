@@ -145,6 +145,13 @@ func main() {
 				}
 				msg += fmt.Sprintf("\n【%s】\n", groupKey)
 				lastGroupKey = groupKey
+
+				// 确定 zoneTypeId
+				zoneTypeID := 85
+				if slot.zoneType == "Outdoor" {
+					zoneTypeID = 83
+				}
+				msg += fmt.Sprintf("<a href=\"https://thekallang.perfectgym.com/clientportal2/#/FacilityBooking?clubId=1&zoneTypeId=%d\">🔗 预定</a>\n\n", zoneTypeID)
 			}
 			msg += fmt.Sprintf("• %s %s (%s)\n", slot.zoneType, slot.court, slot.duration)
 		}
@@ -503,8 +510,9 @@ func userIDFromAuthToken(token string) (int, error) {
 
 func sendTelegramNotification(token, chatID, text string) {
 	payload := map[string]interface{}{
-		"chat_id": chatID,
-		"text":    text,
+		"chat_id":    chatID,
+		"text":       text,
+		"parse_mode": "HTML",
 	}
 
 	body, _ := json.Marshal(payload)
