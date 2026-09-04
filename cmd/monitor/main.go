@@ -68,16 +68,6 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 	log.Println("Court Monitor started")
 
-	now := time.Now().In(time.FixedZone("SGT", 8*3600))
-
-	// 只在 09:30 - 21:00 之间运行
-	hour := now.Hour()
-	min := now.Minute()
-	if hour < 9 || (hour == 9 && min < 30) || hour >= 21 {
-		log.Printf("Outside monitoring window (09:30-21:00). Current time: %02d:%02d", hour, min)
-		return
-	}
-
 	telegramToken := os.Getenv("TELEGRAM_BOT_TOKEN")
 	telegramChatID := os.Getenv("TELEGRAM_CHAT_ID")
 
@@ -85,6 +75,8 @@ func main() {
 		log.Println("Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID")
 		return
 	}
+
+	now := time.Now().In(time.FixedZone("SGT", 8*3600))
 
 	// 初始化 API 客户端
 	baseURL := os.Getenv("PERFECTGYM_BASE_URL")
