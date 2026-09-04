@@ -132,6 +132,7 @@ func checkZoneAvailability(api *directAPIClient, zoneTypeID int, zoneType direct
 
 	// 一次请求获取整周数据
 	scheduleDate := now.Format("2006-01-02")
+	log.Printf("DEBUG: Checking %s zones starting from %s", zoneTypeName, scheduleDate)
 
 	for _, zone := range zoneType.Zones {
 		schedule, err := api.getWeeklySchedule(zoneTypeID, zone.ID, scheduleDate)
@@ -140,6 +141,8 @@ func checkZoneAvailability(api *directAPIClient, zoneTypeID int, zoneType direct
 			continue
 		}
 
+		log.Printf("DEBUG: %s %s returned %d days of data", zoneTypeName, zone.Name, len(schedule.CalendarData))
+
 		// 遍历 7 天的数据
 		for dayIdx, hour := range schedule.CalendarData {
 			if dayIdx >= 7 {
@@ -147,6 +150,7 @@ func checkZoneAvailability(api *directAPIClient, zoneTypeID int, zoneType direct
 			}
 
 			currentDate := now.AddDate(0, 0, dayIdx).Format("2006-01-02")
+			log.Printf("DEBUG: Day %d (%s) has %d time slots", dayIdx, currentDate, len(hour.ClassesPerDay))
 
 			for _, daySlots := range hour.ClassesPerDay {
 				for _, slot := range daySlots {
@@ -231,7 +235,7 @@ func (api *directAPIClient) getWeeklySchedule(zoneTypeID, zoneID int, scheduleDa
 		"date":       scheduleDate,
 		"zoneTypeId": strconv.Itoa(zoneTypeID),
 		"zoneId":     zoneID,
-		"daysInWeek": 6,
+		"daysInWeek": 7,
 	}
 
 	var schedule directSchedule
