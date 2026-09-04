@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -54,6 +55,15 @@ type directAPIClient struct {
 	client  *http.Client
 }
 
+type slotInfo struct {
+	date     string
+	hour     int
+	min      int
+	zoneType string
+	court    string
+	duration string
+}
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 	log.Println("Court Monitor started")
@@ -86,7 +96,7 @@ func main() {
 
 	// 并行检查 Indoor (85) 和 Outdoor (83)
 	type zoneResult struct {
-		slots []string
+		slots []slotInfo
 		err   error
 	}
 	indoorCh := make(chan zoneResult, 1)
@@ -102,7 +112,7 @@ func main() {
 		outdoorCh <- zoneResult{slots, err}
 	}()
 
-	var availableSlots []string
+	var availableSlots []slotInfo
 	if result := <-indoorCh; result.err == nil {
 		availableSlots = append(availableSlots, result.slots...)
 	}
@@ -112,18 +122,40 @@ func main() {
 
 	// 仅在发现场地时发送通知
 	if len(availableSlots) > 0 {
-		msg := fmt.Sprintf("🎾 Kallang Tennis Hub 场地监听\n\n时间: %s\n\n", now.Format("15:04"))
-		msg += "✅ 发现可用场地:\n\n"
+		// 按日期+时间排序
+		sort.Slice(availableSlots, func(i, j int) bool {
+			if availableSlots[i].date != availableSlots[j].date {
+				return availableSlots[i].date < availableSlots[j].date
+			}
+			if availableSlots[i].hour != availableSlots[j].hour {
+				return availableSlots[i].hour < availableSlots[j].hour
+			}
+			return availableSlots[i].min < availableSlots[j].min
+		})
+
+		msg := "🎾 Kallang Tennis Hub 场地监听\n\n✅ 发现可用场地:\n"
+
+		// 分组显示
+		var lastGroupKey string
 		for _, slot := range availableSlots {
-			msg += fmt.Sprintf("• %s\n", slot)
+			groupKey := fmt.Sprintf("%s %02d:%02d", slot.date, slot.hour, slot.min)
+			if groupKey != lastGroupKey {
+				if lastGroupKey != "" {
+					msg += "\n"
+				}
+				msg += fmt.Sprintf("\n【%s】\n", groupKey)
+				lastGroupKey = groupKey
+			}
+			msg += fmt.Sprintf("• %s %s (%s)\n", slot.zoneType, slot.court, slot.duration)
 		}
+
 		sendTelegramNotification(telegramToken, telegramChatID, msg)
 	} else {
 		log.Println("No available slots found")
 	}
 }
 
-func checkZoneAvailability(api *directAPIClient, zoneTypeID int, zoneTypeName string, now time.Time) ([]string, error) {
+func checkZoneAvailability(api *directAPIClient, zoneTypeID int, zoneTypeName string, now time.Time) ([]slotInfo, error) {
 	scheduleDate := now.Format("2006-01-02")
 
 	schedule, err := api.getWeeklySchedule(zoneTypeID, scheduleDate)
@@ -207,7 +239,7 @@ func checkZoneAvailability(api *directAPIClient, zoneTypeID int, zoneTypeName st
 	}
 
 	// 收集结果
-	var slots []string
+	var slots []slotInfo
 	for i := 0; i < len(candidateSlots); i++ {
 		result := <-resultCh
 		if result.err != nil {
@@ -215,8 +247,14 @@ func checkZoneAvailability(api *directAPIClient, zoneTypeID int, zoneTypeName st
 		}
 
 		for _, courtName := range result.courts {
-			slots = append(slots, fmt.Sprintf("%s %s %s - %02d:%02d (%s)",
-				result.slot.currentDate, zoneTypeName, courtName, result.slot.slotHour, result.slot.slotMin, result.slot.duration))
+			slots = append(slots, slotInfo{
+				date:     result.slot.currentDate,
+				hour:     result.slot.slotHour,
+				min:      result.slot.slotMin,
+				zoneType: zoneTypeName,
+				court:    courtName,
+				duration: result.slot.duration,
+			})
 		}
 	}
 
