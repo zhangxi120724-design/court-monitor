@@ -133,7 +133,29 @@ func main() {
 			return availableSlots[i].min < availableSlots[j].min
 		})
 
-		msg := "🎾 Kallang Tennis Hub 场地监听\n\n✅ 发现可用场地:\n"
+		// 检查是否有室内和室外场地
+		hasIndoor, hasOutdoor := false, false
+		for _, slot := range availableSlots {
+			if slot.zoneType == "Indoor" {
+				hasIndoor = true
+			} else if slot.zoneType == "Outdoor" {
+				hasOutdoor = true
+			}
+		}
+
+		msg := "🎾 Kallang Tennis Hub 场地监听\n\n✅ 发现可用场地:\n\n"
+
+		// 添加预定链接
+		if hasIndoor {
+			msg += "<a href=\"https://thekallang.perfectgym.com/clientportal2/#/FacilityBooking?clubId=1&zoneTypeId=85\">🔗 室内预定</a>"
+			if hasOutdoor {
+				msg += " | "
+			}
+		}
+		if hasOutdoor {
+			msg += "<a href=\"https://thekallang.perfectgym.com/clientportal2/#/FacilityBooking?clubId=1&zoneTypeId=83\">🔗 室外预定</a>"
+		}
+		msg += "\n\n"
 
 		// 分组显示
 		var lastGroupKey string
@@ -143,15 +165,8 @@ func main() {
 				if lastGroupKey != "" {
 					msg += "\n"
 				}
-				msg += fmt.Sprintf("\n【%s】\n", groupKey)
+				msg += fmt.Sprintf("【%s】\n", groupKey)
 				lastGroupKey = groupKey
-
-				// 确定 zoneTypeId
-				zoneTypeID := 85
-				if slot.zoneType == "Outdoor" {
-					zoneTypeID = 83
-				}
-				msg += fmt.Sprintf("<a href=\"https://thekallang.perfectgym.com/clientportal2/#/FacilityBooking?clubId=1&zoneTypeId=%d\">🔗 预定</a>\n\n", zoneTypeID)
 			}
 			msg += fmt.Sprintf("• %s %s (%s)\n", slot.zoneType, slot.court, slot.duration)
 		}
