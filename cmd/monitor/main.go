@@ -157,9 +157,15 @@ func checkZoneAvailability(api *directAPIClient, zoneTypeID int, zoneTypeName st
 					slotHour := slotTime.Hour()
 					slotMin := slotTime.Minute()
 
-					// 判断是否在目标时间窗口
-					// TODO: 改回生产配置 (工作日 8-10pm, 周末 5-10pm)
-					inTargetWindow := slotHour >= 15 && slotHour < 23 // 测试: 3pm-11pm
+					// 判断是否在目标时间窗口（工作日 20-22, 周末 17-22）
+					dayOfWeek := slotTime.Weekday()
+					isWeekend := dayOfWeek == time.Saturday || dayOfWeek == time.Sunday
+					var inTargetWindow bool
+					if isWeekend {
+						inTargetWindow = slotHour >= 17 && slotHour < 22 // 周末 5pm-10pm
+					} else {
+						inTargetWindow = slotHour >= 20 && slotHour < 22 // 工作日 8pm-10pm
+					}
 
 					if inTargetWindow {
 						// 调用 Start API 获取具体的 Court 信息
