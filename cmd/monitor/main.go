@@ -168,13 +168,8 @@ func checkZoneAvailability(api *directAPIClient, zoneTypeID int, zoneType direct
 							isSlotWeekend := slotWeekday == time.Saturday || slotWeekday == time.Sunday
 
 							// 判断 slot 是否在目标时间窗口
-							inTargetWindow := false
-							if isSlotWeekday && slotHour >= 20 && slotHour < 22 {  // 工作日 8pm-10pm
-								inTargetWindow = true
-							}
-							if isSlotWeekend && slotHour >= 17 && slotHour < 22 {  // 周末 5pm-10pm
-								inTargetWindow = true
-							}
+							// TODO: 改回生产配置 (工作日 8-10pm, 周末 5-10pm)
+							inTargetWindow := slotHour >= 15 && slotHour < 23  // 测试: 3pm-11pm 任意场地
 
 							if inTargetWindow {
 								duration := slot.BookingDuration
