@@ -64,17 +64,6 @@ func main() {
 	hour := now.Hour()
 	weekday := now.Weekday()
 
-	isWeekday := weekday >= time.Monday && weekday <= time.Friday
-	isWeekend := weekday == time.Saturday || weekday == time.Sunday
-
-	inWindow := false
-	if isWeekday && hour >= 20 && hour < 22 {  // 工作日 8pm-10pm
-		inWindow = true
-	}
-	if isWeekend && hour >= 17 && hour < 22 {  // 周末 5pm-10pm
-		inWindow = true
-	}
-
 	log.Printf("Current time: %s", now.Format("15:04"))
 
 	// 初始化 API 客户端
@@ -160,12 +149,6 @@ func checkZoneAvailability(api *directAPIClient, zoneTypeID int, zoneType direct
 						if strings.EqualFold(slot.Status, "Bookable") {
 							// 获取时间戳
 							slotHour, slotMin := parseTimeString(slot.StartTime)
-
-							// 解析 slot 日期
-							slotDate, _ := time.Parse("2006-01-02", scheduleDate)
-							slotWeekday := slotDate.Weekday()
-							isSlotWeekday := slotWeekday >= time.Monday && slotWeekday <= time.Friday
-							isSlotWeekend := slotWeekday == time.Saturday || slotWeekday == time.Sunday
 
 							// 判断 slot 是否在目标时间窗口
 							// TODO: 改回生产配置 (工作日 8-10pm, 周末 5-10pm)
