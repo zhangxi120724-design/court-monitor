@@ -68,8 +68,6 @@ func main() {
 
 	now := time.Now().In(time.FixedZone("SGT", 8*3600))
 
-	log.Printf("Current time: %s", now.Format("15:04"))
-
 	// 初始化 API 客户端
 	baseURL := os.Getenv("PERFECTGYM_BASE_URL")
 	if baseURL == "" {
@@ -86,113 +84,145 @@ func main() {
 		return
 	}
 
-	// 检查 Indoor (85) 和 Outdoor (83)
+	// 并行检查 Indoor (85) 和 Outdoor (83)
+	type zoneResult struct {
+		slots []string
+		err   error
+	}
+	indoorCh := make(chan zoneResult, 1)
+	outdoorCh := make(chan zoneResult, 1)
+
+	go func() {
+		slots, err := checkZoneAvailability(api, 85, "Indoor", now)
+		indoorCh <- zoneResult{slots, err}
+	}()
+
+	go func() {
+		slots, err := checkZoneAvailability(api, 83, "Outdoor", now)
+		outdoorCh <- zoneResult{slots, err}
+	}()
+
 	var availableSlots []string
-
-	// 检查 Indoor
-	slots, err := checkZoneAvailability(api, 85, "Indoor", now)
-	if err != nil {
-		log.Printf("Check indoor failed: %v", err)
-	} else {
-		availableSlots = append(availableSlots, slots...)
+	if result := <-indoorCh; result.err == nil {
+		availableSlots = append(availableSlots, result.slots...)
+	}
+	if result := <-outdoorCh; result.err == nil {
+		availableSlots = append(availableSlots, result.slots...)
 	}
 
-	// 检查 Outdoor
-	slots, err = checkZoneAvailability(api, 83, "Outdoor", now)
-	if err != nil {
-		log.Printf("Check outdoor failed: %v", err)
-	} else {
-		availableSlots = append(availableSlots, slots...)
-	}
-
-	// 发送消息
-	msg := fmt.Sprintf("🎾 Kallang Tennis Hub 场地监听\n\n时间: %s\n\n", now.Format("15:04"))
-
+	// 仅在发现场地时发送通知
 	if len(availableSlots) > 0 {
+		msg := fmt.Sprintf("🎾 Kallang Tennis Hub 场地监听\n\n时间: %s\n\n", now.Format("15:04"))
 		msg += "✅ 发现可用场地:\n\n"
 		for _, slot := range availableSlots {
 			msg += fmt.Sprintf("• %s\n", slot)
 		}
+		sendTelegramNotification(telegramToken, telegramChatID, msg)
 	} else {
-		msg += "暂无可用场地\n"
-		msg += "监听中...\n"
+		log.Println("No available slots found")
 	}
-
-	sendTelegramNotification(telegramToken, telegramChatID, msg)
 }
 
 func checkZoneAvailability(api *directAPIClient, zoneTypeID int, zoneTypeName string, now time.Time) ([]string, error) {
-	var slots []string
-
 	scheduleDate := now.Format("2006-01-02")
-	log.Printf("DEBUG: Checking %s (zoneTypeId=%d) starting from %s", zoneTypeName, zoneTypeID, scheduleDate)
 
 	schedule, err := api.getWeeklySchedule(zoneTypeID, scheduleDate)
 	if err != nil {
 		return nil, fmt.Errorf("get schedule for %s: %w", zoneTypeName, err)
 	}
 
-	log.Printf("DEBUG: %s returned %d hours of data, days: %v", zoneTypeName, len(schedule.CalendarData), schedule.PagerData.Days)
+	// 第一遍扫描：找到所有符合时间窗口的可用 slot
+	type availableSlotInfo struct {
+		startTime   string
+		slotTime    time.Time
+		slotHour    int
+		slotMin     int
+		duration    string
+		currentDate string
+	}
+	var candidateSlots []availableSlotInfo
 
-	// 遍历所有小时
 	for _, hourData := range schedule.CalendarData {
-		// 遍历 7 天（每个小时有 7 天的数据）
 		for dayIdx, daySlots := range hourData.ClassesPerDay {
 			if dayIdx >= len(schedule.PagerData.Days) {
 				break
 			}
 
-			currentDate := schedule.PagerData.Days[dayIdx]
-
-			// 遍历这个时间段的所有 slot
 			for _, slot := range daySlots {
-				if strings.EqualFold(slot.Status, "Bookable") {
-					// 从 slot.StartTime 直接提取时间 (格式: 2026-09-09T15:00:00)
-					slotTime, err := time.Parse("2006-01-02T15:04:05", slot.StartTime)
-					if err != nil {
-						log.Printf("Failed to parse slot time %s: %v", slot.StartTime, err)
-						continue
-					}
+				if !strings.EqualFold(slot.Status, "Bookable") {
+					continue
+				}
 
-					slotHour := slotTime.Hour()
-					slotMin := slotTime.Minute()
+				slotTime, err := time.Parse("2006-01-02T15:04:05", slot.StartTime)
+				if err != nil {
+					continue
+				}
 
-					// 判断是否是周末或公共假日
-					dayOfWeek := slotTime.Weekday()
-					isWeekend := dayOfWeek == time.Saturday || dayOfWeek == time.Sunday || isSGPublicHoliday(slotTime)
+				slotHour := slotTime.Hour()
+				slotMin := slotTime.Minute()
 
-					// 根据场地类型判断时间窗口
-					var inTargetWindow bool
-					if zoneTypeID == 85 { // Indoor
-						if isWeekend {
-							inTargetWindow = true // 周末全天开放
-						} else {
-							inTargetWindow = slotHour >= 19 && slotHour < 22 // 工作日 7pm-10pm
-						}
-					} else if zoneTypeID == 83 { // Outdoor
-						if isWeekend {
-							inTargetWindow = slotHour >= 17 && slotHour < 22 // 周末 5pm-10pm
-						} else {
-							inTargetWindow = slotHour >= 19 && slotHour < 22 // 工作日 7pm-10pm
-						}
-					}
+				// 检查时间窗口
+				dayOfWeek := slotTime.Weekday()
+				isWeekend := dayOfWeek == time.Saturday || dayOfWeek == time.Sunday || isSGPublicHoliday(slotTime)
 
-					if inTargetWindow {
-						// 调用 Start API 获取具体的 Court 信息
-						courts, errStart := api.getStartFacilityInfo(zoneTypeID, slot.StartTime)
-						if errStart != nil {
-							log.Printf("Failed to get facility info for %s at %s: %v", zoneTypeName, slot.StartTime, errStart)
-							continue
-						}
+				var inTargetWindow bool
+				if zoneTypeID == 85 { // Indoor
+					inTargetWindow = isWeekend || (slotHour >= 19 && slotHour < 22)
+				} else if zoneTypeID == 83 { // Outdoor
+					inTargetWindow = (isWeekend && slotHour >= 17 && slotHour < 22) || (!isWeekend && slotHour >= 19 && slotHour < 22)
+				}
 
-						// 对每个 court 添加通知
-						for _, courtName := range courts {
-							slots = append(slots, fmt.Sprintf("%s %s %s - %02d:%02d (%s)",
-								currentDate, zoneTypeName, courtName, slotHour, slotMin, slot.BookingDuration))
-						}
-					}
+				if inTargetWindow {
+					candidateSlots = append(candidateSlots, availableSlotInfo{
+						startTime:   slot.StartTime,
+						slotTime:    slotTime,
+						slotHour:    slotHour,
+						slotMin:     slotMin,
+						duration:    slot.BookingDuration,
+						currentDate: schedule.PagerData.Days[dayIdx],
+					})
 				}
 			}
+		}
+	}
+
+	// 如果没有候选，直接返回
+	if len(candidateSlots) == 0 {
+		return nil, nil
+	}
+
+	// 第二遍：只对有候选的时间调用 Start API（并行）
+	type startAPIResult struct {
+		courts []string
+		slot   availableSlotInfo
+		err    error
+	}
+	resultCh := make(chan startAPIResult, len(candidateSlots))
+
+	for _, candidateSlot := range candidateSlots {
+		go func(cs availableSlotInfo) {
+			courts, err := api.getStartFacilityInfo(zoneTypeID, cs.startTime)
+			var courtNames []string
+			if err == nil {
+				for _, c := range courts {
+					courtNames = append(courtNames, c.Name)
+				}
+			}
+			resultCh <- startAPIResult{courtNames, cs, err}
+		}(candidateSlot)
+	}
+
+	// 收集结果
+	var slots []string
+	for i := 0; i < len(candidateSlots); i++ {
+		result := <-resultCh
+		if result.err != nil {
+			continue
+		}
+
+		for _, courtName := range result.courts {
+			slots = append(slots, fmt.Sprintf("%s %s %s - %02d:%02d (%s)",
+				result.slot.currentDate, zoneTypeName, courtName, result.slot.slotHour, result.slot.slotMin, result.slot.duration))
 		}
 	}
 
@@ -363,11 +393,6 @@ func (api *directAPIClient) postJSON(path string, payload interface{}, out inter
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("api returned %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	// DEBUG: 打印 GetWeeklySchedule 的返回数据
-	if path == "/FacilityBookings/FacilityCalendar/GetWeeklySchedule" {
-		log.Printf("DEBUG GetWeeklySchedule response: %s", string(respBody))
 	}
 
 	if out != nil && len(respBody) > 0 {
