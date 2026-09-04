@@ -148,23 +148,27 @@ func main() {
 
 func checkZoneAvailability(api *directAPIClient, zoneTypeID int, zoneType directZoneType, zoneTypeName string, now time.Time) ([]string, error) {
 	var slots []string
-	scheduleDate := now.Format("2006-01-02")
 
-	for _, zone := range zoneType.Zones {
-		schedule, err := api.getWeeklySchedule(zoneTypeID, zone.ID, scheduleDate)
-		if err != nil {
-			log.Printf("Get schedule for %s %s: %v", zoneTypeName, zone.Name, err)
-			continue
-		}
+	// 检查未来 7 天
+	for dayOffset := 0; dayOffset < 7; dayOffset++ {
+		scheduleDate := now.AddDate(0, 0, dayOffset).Format("2006-01-02")
 
-		for _, hour := range schedule.CalendarData {
-			for _, daySlots := range hour.ClassesPerDay {
-				for _, slot := range daySlots {
-					if strings.EqualFold(slot.Status, "Bookable") {
-						// 获取时间戳
-						slotHour, slotMin := parseTimeString(slot.StartTime)
-						duration := slot.BookingDuration
-						slots = append(slots, fmt.Sprintf("%s %s %s - %02d:%02d (%s)", scheduleDate, zoneTypeName, zone.Name, slotHour, slotMin, duration))
+		for _, zone := range zoneType.Zones {
+			schedule, err := api.getWeeklySchedule(zoneTypeID, zone.ID, scheduleDate)
+			if err != nil {
+				log.Printf("Get schedule for %s %s: %v", zoneTypeName, zone.Name, err)
+				continue
+			}
+
+			for _, hour := range schedule.CalendarData {
+				for _, daySlots := range hour.ClassesPerDay {
+					for _, slot := range daySlots {
+						if strings.EqualFold(slot.Status, "Bookable") {
+							// 获取时间戳
+							slotHour, slotMin := parseTimeString(slot.StartTime)
+							duration := slot.BookingDuration
+							slots = append(slots, fmt.Sprintf("%s %s %s - %02d:%02d (%s)", scheduleDate, zoneTypeName, zone.Name, slotHour, slotMin, duration))
+						}
 					}
 				}
 			}
