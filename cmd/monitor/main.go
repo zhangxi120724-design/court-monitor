@@ -135,7 +135,7 @@ func checkZoneAvailability(api *directAPIClient, zoneTypeID int, zoneTypeName st
 	log.Printf("DEBUG: %s returned %d hours of data, days: %v", zoneTypeName, len(schedule.CalendarData), schedule.PagerData.Days)
 
 	// 遍历所有小时
-	for hourIdx, hourData := range schedule.CalendarData {
+	for _, hourData := range schedule.CalendarData {
 		// 遍历 7 天（每个小时有 7 天的数据）
 		for dayIdx, daySlots := range hourData.ClassesPerDay {
 			if dayIdx >= len(schedule.PagerData.Days) {
