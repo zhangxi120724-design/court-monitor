@@ -2,7 +2,7 @@ name: Kallang Tennis Monitor
 
 on:
   schedule:
-    - cron: '* * * * *'
+    - cron: '*/3 * * * *'
   workflow_dispatch:
 
 jobs:
