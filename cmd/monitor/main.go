@@ -202,13 +202,7 @@ func checkZoneAvailability(api *directAPIClient, zoneTypeID int, zoneTypeName st
 	for _, candidateSlot := range candidateSlots {
 		go func(cs availableSlotInfo) {
 			courts, err := api.getStartFacilityInfo(zoneTypeID, cs.startTime)
-			var courtNames []string
-			if err == nil {
-				for _, c := range courts {
-					courtNames = append(courtNames, c.Name)
-				}
-			}
-			resultCh <- startAPIResult{courtNames, cs, err}
+			resultCh <- startAPIResult{courts, cs, err}
 		}(candidateSlot)
 	}
 
