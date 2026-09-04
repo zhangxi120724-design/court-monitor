@@ -61,8 +61,6 @@ func main() {
 	}
 
 	now := time.Now().In(time.FixedZone("SGT", 8*3600))
-	hour := now.Hour()
-	weekday := now.Weekday()
 
 	log.Printf("Current time: %s", now.Format("15:04"))
 
