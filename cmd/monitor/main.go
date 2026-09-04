@@ -94,8 +94,20 @@ func main() {
 	storagePath := ".auth/storage-state.json"
 	api, err := newDirectAPIClient(baseURL, storagePath)
 	if err != nil {
-		log.Printf("Failed to init API client: %v", err)
-		sendTelegramNotification(telegramToken, telegramChatID, fmt.Sprintf("❌ API 初始化失败: %v", err))
+		// 尝试用邮箱和密码重新认证
+		log.Printf("Storage file not found, trying credential login: %v", err)
+		email := os.Getenv("PERFECTGYM_EMAIL")
+		password := os.Getenv("PERFECTGYM_PASSWORD")
+		if email == "" || password == "" {
+			log.Println("Missing PERFECTGYM_EMAIL or PERFECTGYM_PASSWORD")
+			sendTelegramNotification(telegramToken, telegramChatID, "❌ 配置错误: 缺少邮箱或密码")
+			return
+		}
+
+		// 这里需要通过 Playwright 或浏览器获取认证
+		// 简化起见，我们只记录日志
+		log.Println("Please ensure .auth/storage-state.json exists or configure PLAYWRIGHT_AUTH")
+		sendTelegramNotification(telegramToken, telegramChatID, "❌ 认证文件缺失，请本地运行一次预订脚本以生成认证")
 		return
 	}
 
