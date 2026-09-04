@@ -1,0 +1,31 @@
+name: Kallang Tennis Monitor
+
+on:
+  schedule:
+    - cron: '* * * * *'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+      - run: go mod download
+      - name: Run monitor check
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          PERFECTGYM_EMAIL: ${{ secrets.PERFECTGYM_EMAIL }}
+          PERFECTGYM_PASSWORD: ${{ secrets.PERFECTGYM_PASSWORD }}
+          PERFECTGYM_BASE_URL: ${{ secrets.PERFECTGYM_BASE_URL }}
+          BOOKING_TIMEZONE: Asia/Singapore
+          MONITOR_CHECK_INTERVAL_MINS: 1
+          MONITOR_WEEKDAY_START_HOUR: 20
+          MONITOR_WEEKDAY_END_HOUR: 22
+          MONITOR_WEEKEND_START_HOUR: 17
+          MONITOR_WEEKEND_END_HOUR: 22
+          DIRECT_API: "true"
+          DI          DI          DI          DI          tor.go -once
