@@ -276,6 +276,11 @@ func (api *directAPIClient) postJSON(path string, payload interface{}, out inter
 		return fmt.Errorf("api returned %d: %s", resp.StatusCode, string(respBody))
 	}
 
+	// DEBUG: 打印 GetWeeklySchedule 的返回数据
+	if path == "/FacilityBookings/FacilityCalendar/GetWeeklySchedule" {
+		log.Printf("DEBUG GetWeeklySchedule response: %s", string(respBody))
+	}
+
 	if out != nil && len(respBody) > 0 {
 		if err := json.Unmarshal(respBody, out); err != nil {
 			return fmt.Errorf("decode response: %w", err)
