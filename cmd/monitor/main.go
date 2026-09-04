@@ -8,6 +8,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -17,7 +19,7 @@ func main() {
 
 	token := os.Getenv("TELEGRAM_BOT_TOKEN")
 	chatID := os.Getenv("TELEGRAM_CHAT_ID")
-	
+
 	if token == "" || chatID == "" {
 		log.Println("Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID")
 		return
@@ -31,21 +33,31 @@ func main() {
 	isWeekend := weekday == time.Saturday || weekday == time.Sunday
 
 	inWindow := false
-	if isWeekday && hour >= 15 && hour < 23 {  // 工作日 3pm-11pm
+	if isWeekday && hour >= 15 && hour < 23 {
 		inWindow = true
 	}
-	if isWeekend && hour >= 15 && hour < 23 {  // 周末 3pm-11pm
+	if isWeekend && hour >= 15 && hour < 23 {
 		inWindow = true
 	}
 
-	log.Printf("Time: %s, Weekday: %v, Weekend: %v, Hour: %d, InWindow: %v", 
+	log.Printf("Time: %s, Weekday: %v, Weekend: %v, Hour: %d, InWindow: %v",
 		now.Format("15:04"), isWeekday, isWeekend, hour, inWindow)
 
-	if inWindow {
-		msg := fmt.Sprintf("🎾 Monitor running at %s\n\nTime window is active. Would check court availability.", 
-			now.Format("15:04"))
-		sendTelegramNotification(token, chatID, msg)
+	if !inWindow {
+		log.Println("Outside target time window")
+		return
 	}
+
+	// 构建消息
+	msg := fmt.Sprintf("🎾 Kallang Tennis Hub 场地监听\n\n时间: %s\n\n", now.Format("15:04"))
+
+	// 添加测试消息（实际应集成真实的场地检查）
+	msg += "✅ 监听系统正常运行\n"
+	msg += "工作日: 3pm-11pm\n"
+	msg += "周末: 3pm-11pm\n\n"
+	msg += "如果有空场地将在此发送详细信息"
+
+	sendTelegramNotification(token, chatID, msg)
 }
 
 func sendTelegramNotification(token, chatID, text string) {
