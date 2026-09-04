@@ -28,4 +28,5 @@ jobs:
           MONITOR_WEEKEND_START_HOUR: 17
           MONITOR_WEEKEND_END_HOUR: 22
           DIRECT_API: "true"
-          DI          DI          DI          DI          tor.go -once
+          DIRECT_API_WORKERS: 2
+        run: go run . monitor.go -once
