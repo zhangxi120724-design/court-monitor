@@ -105,20 +105,17 @@ func main() {
 		availableSlots = append(availableSlots, slots...)
 	}
 
-	// 发送消息
-	msg := fmt.Sprintf("🎾 Kallang Tennis Hub 场地监听\n\n时间: %s\n\n", now.Format("15:04"))
-
+	// 仅在发现场地时发送通知
 	if len(availableSlots) > 0 {
+		msg := fmt.Sprintf("🎾 Kallang Tennis Hub 场地监听\n\n时间: %s\n\n", now.Format("15:04"))
 		msg += "✅ 发现可用场地:\n\n"
 		for _, slot := range availableSlots {
 			msg += fmt.Sprintf("• %s\n", slot)
 		}
+		sendTelegramNotification(telegramToken, telegramChatID, msg)
 	} else {
-		msg += "暂无可用场地\n"
-		msg += "监听中...\n"
+		log.Println("No available slots found")
 	}
-
-	sendTelegramNotification(telegramToken, telegramChatID, msg)
 }
 
 func checkZoneAvailability(api *directAPIClient, zoneTypeID int, zoneTypeName string, now time.Time) ([]string, error) {
