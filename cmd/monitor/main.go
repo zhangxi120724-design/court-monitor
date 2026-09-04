@@ -333,11 +333,19 @@ func userIDFromAuthToken(token string) (int, error) {
 	}
 
 	if value, ok := claims["UserId"]; ok {
-		if userID, ok := value.(float64); ok {
-			return int(userID), nil
+		switch v := value.(type) {
+		case float64:
+			return int(v), nil
+		case string:
+			userID, err := strconv.Atoi(v)
+			if err == nil {
+				return userID, nil
+			}
 		}
+		log.Printf("DEBUG: UserId found but wrong type: %T = %v", value, value)
 	}
 
+	log.Printf("DEBUG: Claims: %v", claims)
 	return 0, fmt.Errorf("UserId not found in token")
 }
 
