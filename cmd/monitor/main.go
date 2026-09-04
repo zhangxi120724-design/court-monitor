@@ -164,7 +164,7 @@ func checkZoneAvailability(api *directAPIClient, zoneTypeID int, zoneType direct
 						// 获取时间戳
 						slotHour, slotMin := parseTimeString(slot.StartTime)
 						duration := slot.BookingDuration
-						slots = append(slots, fmt.Sprintf("%s %s - %02d:%02d (%s)", zoneTypeName, zone.Name, slotHour, slotMin, duration))
+						slots = append(slots, fmt.Sprintf("%s %s %s - %02d:%02d (%s)", scheduleDate, zoneTypeName, zone.Name, slotHour, slotMin, duration))
 					}
 				}
 			}
