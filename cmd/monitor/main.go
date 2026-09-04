@@ -68,10 +68,10 @@ func main() {
 	isWeekend := weekday == time.Saturday || weekday == time.Sunday
 
 	inWindow := false
-	if isWeekday && hour >= 15 && hour < 23 {
+	if isWeekday && hour >= 20 && hour < 22 {  // 工作日 8pm-10pm
 		inWindow = true
 	}
-	if isWeekend && hour >= 15 && hour < 23 {
+	if isWeekend && hour >= 17 && hour < 22 {  // 周末 5pm-10pm
 		inWindow = true
 	}
 
