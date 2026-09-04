@@ -130,32 +130,37 @@ func main() {
 func checkZoneAvailability(api *directAPIClient, zoneTypeID int, zoneType directZoneType, zoneTypeName string, now time.Time) ([]string, error) {
 	var slots []string
 
-	// 检查未来 7 天
-	for dayOffset := 0; dayOffset < 7; dayOffset++ {
-		scheduleDate := now.AddDate(0, 0, dayOffset).Format("2006-01-02")
+	// 一次请求获取整周数据
+	scheduleDate := now.Format("2006-01-02")
 
-		for _, zone := range zoneType.Zones {
-			schedule, err := api.getWeeklySchedule(zoneTypeID, zone.ID, scheduleDate)
-			if err != nil {
-				log.Printf("Get schedule for %s %s: %v", zoneTypeName, zone.Name, err)
-				continue
+	for _, zone := range zoneType.Zones {
+		schedule, err := api.getWeeklySchedule(zoneTypeID, zone.ID, scheduleDate)
+		if err != nil {
+			log.Printf("Get schedule for %s %s: %v", zoneTypeName, zone.Name, err)
+			continue
+		}
+
+		// 遍历 7 天的数据
+		for dayIdx, hour := range schedule.CalendarData {
+			if dayIdx >= 7 {
+				break  // 只取前 7 天
 			}
 
-			for _, hour := range schedule.CalendarData {
-				for _, daySlots := range hour.ClassesPerDay {
-					for _, slot := range daySlots {
-						if strings.EqualFold(slot.Status, "Bookable") {
-							// 获取时间戳
-							slotHour, slotMin := parseTimeString(slot.StartTime)
+			currentDate := now.AddDate(0, 0, dayIdx).Format("2006-01-02")
 
-							// 判断 slot 是否在目标时间窗口
-							// TODO: 改回生产配置 (工作日 8-10pm, 周末 5-10pm)
-							inTargetWindow := slotHour >= 15 && slotHour < 23  // 测试: 3pm-11pm 任意场地
+			for _, daySlots := range hour.ClassesPerDay {
+				for _, slot := range daySlots {
+					if strings.EqualFold(slot.Status, "Bookable") {
+						// 获取时间戳
+						slotHour, slotMin := parseTimeString(slot.StartTime)
 
-							if inTargetWindow {
-								duration := slot.BookingDuration
-								slots = append(slots, fmt.Sprintf("%s %s %s - %02d:%02d (%s)", scheduleDate, zoneTypeName, zone.Name, slotHour, slotMin, duration))
-							}
+						// 判断 slot 是否在目标时间窗口
+						// TODO: 改回生产配置 (工作日 8-10pm, 周末 5-10pm)
+						inTargetWindow := slotHour >= 15 && slotHour < 23  // 测试: 3pm-11pm 任意场地
+
+						if inTargetWindow {
+							duration := slot.BookingDuration
+							slots = append(slots, fmt.Sprintf("%s %s %s - %02d:%02d (%s)", currentDate, zoneTypeName, zone.Name, slotHour, slotMin, duration))
 						}
 					}
 				}
