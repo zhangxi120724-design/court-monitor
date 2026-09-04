@@ -75,13 +75,7 @@ func main() {
 		inWindow = true
 	}
 
-	log.Printf("Time: %s, Weekday: %v, Weekend: %v, Hour: %d, InWindow: %v",
-		now.Format("15:04"), isWeekday, isWeekend, hour, inWindow)
-
-	if !inWindow {
-		log.Println("Outside target time window")
-		return
-	}
+	log.Printf("Current time: %s", now.Format("15:04"))
 
 	// 初始化 API 客户端
 	baseURL := os.Getenv("PERFECTGYM_BASE_URL")
@@ -166,8 +160,26 @@ func checkZoneAvailability(api *directAPIClient, zoneTypeID int, zoneType direct
 						if strings.EqualFold(slot.Status, "Bookable") {
 							// 获取时间戳
 							slotHour, slotMin := parseTimeString(slot.StartTime)
-							duration := slot.BookingDuration
-							slots = append(slots, fmt.Sprintf("%s %s %s - %02d:%02d (%s)", scheduleDate, zoneTypeName, zone.Name, slotHour, slotMin, duration))
+
+							// 解析 slot 日期
+							slotDate, _ := time.Parse("2006-01-02", scheduleDate)
+							slotWeekday := slotDate.Weekday()
+							isSlotWeekday := slotWeekday >= time.Monday && slotWeekday <= time.Friday
+							isSlotWeekend := slotWeekday == time.Saturday || slotWeekday == time.Sunday
+
+							// 判断 slot 是否在目标时间窗口
+							inTargetWindow := false
+							if isSlotWeekday && slotHour >= 20 && slotHour < 22 {  // 工作日 8pm-10pm
+								inTargetWindow = true
+							}
+							if isSlotWeekend && slotHour >= 17 && slotHour < 22 {  // 周末 5pm-10pm
+								inTargetWindow = true
+							}
+
+							if inTargetWindow {
+								duration := slot.BookingDuration
+								slots = append(slots, fmt.Sprintf("%s %s %s - %02d:%02d (%s)", scheduleDate, zoneTypeName, zone.Name, slotHour, slotMin, duration))
+							}
 						}
 					}
 				}
