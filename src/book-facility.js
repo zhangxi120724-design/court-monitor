@@ -19,7 +19,11 @@ const config = {
   password: (process.env.PERFECTGYM_PASSWORD || "").trim(),
   headless: parseBoolean(process.env.HEADLESS, false),
   pollIntervalMs: parseInteger(process.env.POLL_INTERVAL_MS, 1500),
-  maxWaitMs: parseInteger(process.env.MAX_WAIT_MS, 120000)
+  maxWaitMs: parseInteger(process.env.MAX_WAIT_MS, 120000),
+  // FastMode: 快速预定模式（由 Go DirectAPI bot 提供）
+  fastModeCourtId: (process.env.COURT_ID || "").trim(),
+  fastModeTargetTime: (process.env.TARGET_TIME || "").trim(),
+  fastModeDuration: parseInteger(process.env.TARGET_DURATION, 60)
 };
 
 async function main() {
@@ -31,20 +35,56 @@ async function main() {
 
   try {
     await ensureLoggedIn(page, context);
-    await page.goto(config.baseUrl, { waitUntil: "domcontentloaded" });
-    await dismissCommonPopups(page);
-    await navigateToTargetDate(page, config.targetDate);
 
-    const slot = await pollForTargetSlot(page, config.maxWaitMs, config.pollIntervalMs);
-    if (!slot) {
-      throw new Error(`No matching slot found before timeout (${config.maxWaitMs} ms).`);
+    // 快速模式：由 Go DirectAPI bot 提供 court ID，跳过轮询
+    if (config.fastModeCourtId && config.fastModeTargetTime) {
+      console.log(`FastMode: Booking court ${config.fastModeCourtId} at ${config.fastModeTargetTime}`);
+      await bookingFastMode(page, config.fastModeCourtId, config.fastModeTargetTime, config.fastModeDuration);
+    } else {
+      // 传统轮询模式
+      await page.goto(config.baseUrl, { waitUntil: "domcontentloaded" });
+      await dismissCommonPopups(page);
+      await navigateToTargetDate(page, config.targetDate);
+
+      const slot = await pollForTargetSlot(page, config.maxWaitMs, config.pollIntervalMs);
+      if (!slot) {
+        throw new Error(`No matching slot found before timeout (${config.maxWaitMs} ms).`);
+      }
+
+      await addSlotToCart(slot);
     }
 
-    await addSlotToCart(slot);
     await context.storageState({ path: STORAGE_PATH });
-    console.log("Success: matching facility slot was added to cart.");
+    console.log("Success: facility slot was added to cart.");
   } finally {
     await browser.close();
+  }
+}
+
+async function bookingFastMode(page, courtId, targetTime, duration) {
+  // 直接跳到预定页面（已选定 court 和时间）
+  const bookingUrl = `${config.baseUrl}&zoneId=${courtId}&startDate=${encodeURIComponent(targetTime)}&duration=${duration}`;
+
+  await page.goto(bookingUrl, { waitUntil: "domcontentloaded" });
+  await dismissCommonPopups(page);
+
+  // 寻找并点击 "Add to cart" button
+  const addToCartButton = page.getByRole("button", { name: /add to cart|add|book/i }).first();
+  if (await addToCartButton.isVisible().catch(() => false)) {
+    console.log("Clicking Add to cart button...");
+    await addToCartButton.click();
+    await page.waitForTimeout(500);
+  }
+
+  // 关闭弹窗
+  await dismissCommonPopups(page);
+
+  // 寻找并点击 "Book now" button
+  const bookNowButton = page.getByRole("button", { name: /book now|confirm|complete/i }).first();
+  if (await bookNowButton.isVisible().catch(() => false)) {
+    console.log("Clicking Book now button...");
+    await bookNowButton.click();
+    await page.waitForTimeout(1000);
   }
 }
 
