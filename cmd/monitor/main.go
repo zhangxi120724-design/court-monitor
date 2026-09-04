@@ -159,7 +159,7 @@ func checkZoneAvailability(api *directAPIClient, zoneTypeID int, zoneTypeName st
 
 					// 判断是否在目标时间窗口
 					// TODO: 改回生产配置 (工作日 8-10pm, 周末 5-10pm)
-					inTargetWindow := slotHour >= 15 && slotHour < 23  // 测试: 3pm-11pm
+					inTargetWindow := slotHour >= 15 && slotHour < 23 // 测试: 3pm-11pm
 
 					if inTargetWindow {
 						// 调用 Start API 获取具体的 Court 信息
