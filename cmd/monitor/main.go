@@ -231,7 +231,7 @@ func checkZoneAvailability(api *directAPIClient, zoneTypeID int, zoneTypeName st
 				if zoneTypeID == 85 { // Indoor
 					inTargetWindow = (isWeekend && slotHour >= 9 && slotHour < 22) || (!isWeekend && slotHour >= 20 && slotHour < 22)
 				} else if zoneTypeID == 83 { // Outdoor
-					inTargetWindow = (isWeekend && slotHour >= 9 && slotHour < 22) || (!isWeekend && slotHour >= 20 && slotHour < 22)
+					inTargetWindow = (isWeekend && slotHour >= 16 && slotHour < 22) || (!isWeekend && slotHour >= 20 && slotHour < 22)
 				}
 
 				if inTargetWindow {
