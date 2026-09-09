@@ -167,13 +167,17 @@ func main() {
 
 		// 分组显示
 		var lastGroupKey string
+		weekdayNames := []string{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"}
 		for _, slot := range availableSlots {
 			groupKey := fmt.Sprintf("%s %02d:%02d", slot.date, slot.hour, slot.min)
 			if groupKey != lastGroupKey {
 				if lastGroupKey != "" {
 					msg += "\n"
 				}
-				msg += fmt.Sprintf("【%s】\n", groupKey)
+				// 解析日期获取星期几
+				t, _ := time.Parse("2006-01-02", slot.date)
+				weekday := weekdayNames[t.Weekday()]
+				msg += fmt.Sprintf("【%s %s %02d:%02d】\n", weekday, slot.date, slot.hour, slot.min)
 				lastGroupKey = groupKey
 			}
 			msg += fmt.Sprintf("• %s %s (%s)\n", slot.zoneType, slot.court, slot.duration)
